@@ -1,0 +1,10 @@
+0) Change the keyfile to your own key file (DO NOT POST THIS ON GITHUB)
+1) Run pub.py in Pycharm (you should see it pushing files)
+2) Run reader.py in Pycharm (you should see that it receives the tweets)
+3) Run your pipeline in the terminal
+    a)  pipeline.py: python pipeline.py --topic projects/dataengineering-course/topics/usdata --project dataengineering-course --dataset usdata --table_name posts --pid dataengineering-course --mbucket ass_2
+        This pipeline is the most up to date, which currently gives the NotImportedError because of the Preprocessing part.
+        I know it downloads the model, which it should do (which happens in the Prediction, so after the Preprocessing????)
+    b)  pipeline2510.py: python pipeline2510.py --topic projects/dataengineering-course/topics/usdata --project dataengineering-course --dataset usdata --table_name posts --pid dataengineering-course --mbucket ass_2
+        This is the pipeline from 25-10 where you can see tweets attempting to go through the pipeline, which gives errors because they are not processed blabla
+        I included this one because I feel like it is a more basic form, and I maybe already messed up the pipeline.py

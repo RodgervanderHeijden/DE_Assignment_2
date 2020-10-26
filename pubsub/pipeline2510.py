@@ -145,11 +145,8 @@ class ParseRows(beam.DoFn):
             self.num_parse_errors.inc()
             logging.error('Parse error on "%s"', elem)
 
-def printAndReturn(element):
-    print('DIT IS WAT IK PRINAT KIJK KIJK KIJK!!!!!!:', element)
-    return element
 
-class Preprocess(beam.DoFn):
+class Preprocess(beam.PTransform):
     """A transform to extract key/score information and sum the scores.
     The constructor argument `field` determines whether 'team' or 'user' info is
     extracted.
@@ -158,27 +155,24 @@ class Preprocess(beam.DoFn):
     def __init__(self, field):
         # TODO(BEAM-6158): Revert the workaround once we can pickle super() on py3.
         # super(ExtractAndSumScore, self).__init__()
-        # beam.PTransform.__init__(self)
-        self._field = field
-        # beam.DoFn.__init__(self)
-
+        beam.PTransform.__init__(self)
+        self.field = field
         self._tokenizer = None
 
     def clean(self, total):
-        printAndReturn(total)
-        texts= total
+        texts, user_id, timestamp = total
         regex = re.compile('[^A-Za-z ]')
-        clean_text = regex.sub('', texts.strip().lower()) # for text in texts]
+        clean_texts = [regex.sub('', text.strip().lower()) for text in texts]
         tokenizer = tftext.Tokenizer()
-        tokenizer.fit_on_texts(clean_text)
+        tokenizer.fit_on_texts(texts)
         self._tokenizer = tokenizer
-        text_sequence = self._tokenizer.texts_to_sequences(clean_text)
+        text_sequence = self._tokenizer.texts_to_sequences(clean_texts)
         return text_sequence
 
     def expand(self, pcoll):
         return (
                 pcoll
-                | beam.FlatMap(self.clean(self.field)))
+                | beam.FlatMap(self.clean))
 
 class MyPredictDoFn(beam.DoFn):
 
@@ -207,11 +201,6 @@ class MyPredictDoFn(beam.DoFn):
         predictions = self._model.predict(element)
         labels = self._postprocess(predictions)
         return labels
-
-    def expand(self, pcoll):
-        return (
-                pcoll
-                | 'Do_prediction' >> self.process(self, pcoll))
 
 class SentimentDict(beam.DoFn): #okay??
     """Formats the data into a dictionary of BigQuery columns with their values
@@ -296,8 +285,8 @@ class CalculateSentimentScores(beam.PTransform): #okay??
             accumulation_mode=trigger.AccumulationMode.ACCUMULATING,
             allowed_lateness=self.allowed_lateness_seconds)
                 # Extract and sum teamname/score pairs from the event data.
-                | 'Preprocess' >> beam.ParDo(Preprocess(field='text'))
-                | 'Predict' >> beam.ParDo(MyPredictDoFn(project_id= self.actual_project, bucket_name=self.actual_bucket)))
+                | 'Preprocess' >> Preprocess('text')
+                | 'Predict' >> beam.ParDo(MyPredictDoFn(self.actual_project, self.actual_bucket)))
 
 
 # [END window_and_trigger]
@@ -399,8 +388,7 @@ def run(argv=None, save_main_session=True):
                 'sentiment': 'NUMERIC',
                 'posted_at': 'TIMESTAMP',
             },
-            options.view_as(GoogleCloudOptions).project)
-        )
+            options.view_as(GoogleCloudOptions).project))
 
 
 

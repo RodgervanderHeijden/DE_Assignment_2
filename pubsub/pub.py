@@ -30,7 +30,7 @@ def publish_messages(project_id, topic_id, data_file):
 
     print(f"Published messages to {topic_path}.")
 
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"]="dataengineering-course-9981ec7efd95.json"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"]="dataengineering-course-5fc3ec3747be.json"
 logging.getLogger().setLevel(logging.INFO)
 #create_topic("dataengineering-course", "usdata")
-publish_messages("dataengineering-course", "usdata", "C:/Users/s161158/PycharmProjects/got_sentiment/pubsub/twitter_data.csv")
+publish_messages("dataengineering-course", "usdata", "twitter_data.csv")
