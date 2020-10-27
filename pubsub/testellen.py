@@ -145,73 +145,71 @@ class ParseRows(beam.DoFn):
             self.num_parse_errors.inc()
             logging.error('Parse error on "%s"', elem)
 
-def printAndReturn(element):
-    print('DIT IS WAT IK PRINT KIJK KIJK KIJK!!!!!!:', element)
-    return element
 
-class Preprocess(beam.DoFn):
-    """A transform to extract key/score information and sum the scores.
-    The constructor argument `field` determines whether 'team' or 'user' info is
-    extracted.
-    """
-
-    def __init__(self, field):
-        # TODO(BEAM-6158): Revert the workaround once we can pickle super() on py3.
-        # super(ExtractAndSumScore, self).__init__()
-        # beam.PTransform.__init__(self)
-        self._field = field
-        # beam.DoFn.__init__(self)
-
-        self._tokenizer = None
-
-    def clean(self, total):
-        printAndReturn(total)
-        # texts= total
-        # regex = re.compile('[^A-Za-z ]')
-        # clean_text = regex.sub('', texts.strip().lower()) # for text in texts]
-        # tokenizer = tftext.Tokenizer()
-        # tokenizer.fit_on_texts(clean_text)
-        # self._tokenizer = tokenizer
-        # text_sequence = self._tokenizer.texts_to_sequences(clean_text)
-        return #text_sequence
-
-    def expand(self, pcoll):
-        return (
-                pcoll
-                | beam.FlatMap(self.clean(self.field)))
+# class Preprocess(beam.DoFn):
+#     """A transform to extract key/score information and sum the scores.
+#     The constructor argument `field` determines whether 'team' or 'user' info is
+#     extracted.
+#     """
+#
+#     def __init__(self, field):
+#         # TODO(BEAM-6158): Revert the workaround once we can pickle super() on py3.
+#         # super(ExtractAndSumScore, self).__init__()
+#         beam.DoFn.__init__(self)
+#         self.field = field
+#         self._tokenizer = None
+#
+#     def clean(text):
+#         new = text.lower()
+#         return new
+#
+#     def expand(self, pcoll):
+#         return (
+#                 pcoll
+#                 | beam.Map( lambda elem: (elem[self.field]))
+#                 | beam.FlatMap(self.clean()))
+def voorbereiden(total):
+    ident, text, hoi = total
+    new = text.lower()
+    print('DIT IS WAT IK PRINT:', new, 'DIT IS WAT HET WAS', text)
+    return new
 
 class MyPredictDoFn(beam.DoFn):
 
-    def __init__(self, project_id, bucket_name):
+    def __init__(self, project_id, bucket_name, user, text):
         self._model = None
         self._project_id = project_id
         self._bucket_name = bucket_name
-
-    def setup(self):
-        logging.info("Prediction initialisation. Load Model")
-        client = storage.Client(project=self._project_id)
-        bucket = client.get_bucket(self._bucket_name)
-        blob = bucket.blob('keras_saved_model.h5')
-        blob.download_to_filename('downloaded_model.h5')
-        self._model = load_model('downloaded_model.h5')
-
-    def _postprocess(self, predictions):
-        labels = ['negative', 'positive']
-        return [
-            {
-                "label": labels[int(np.round(prediction))],
-                "score": float(np.round(prediction, 4))
-            } for prediction in predictions]
+        self.user = user
+        self.tweet = text
+    #
+    # def setup(self):
+    #     logging.info("Prediction initialisation. Load Model")
+    #     client = storage.Client(project=self._project_id)
+    #     bucket = client.get_bucket(self._bucket_name)
+    #     blob = bucket.blob('keras_saved_model.h5')
+    #     blob.download_to_filename('downloaded_model.h5')
+    #     self._model = load_model('downloaded_model.h5')
+    #
+    # def _postprocess(self, predictions):
+    #     labels = ['negative', 'positive']
+    #     return [
+    #         {
+    #             "label": labels[int(np.round(prediction))],
+    #             "score": float(np.round(prediction, 4))
+    #         } for prediction in predictions]
 
     def process(self, element, **kwargs):
-        predictions = self._model.predict(element)
-        labels = self._postprocess(predictions)
+        # predictions = self._model.predict(element)
+        # labels = self._postprocess(predictions)
+        print('JE KOMT WEL IN DE PROCESS VAN PREDICTION')
+        labels = ['yes', 'yes', 'no']
         return labels
 
     def expand(self, pcoll):
         return (
                 pcoll
-                | 'Do_prediction' >> self.process(self, pcoll))
+                | 'preprocess' >> beam.Map(lambda elem: (elem[self.user], voorbereiden(elem[self.tweet]), self.process(elem[self.tweet]))))
 
 class SentimentDict(beam.DoFn): #okay??
     """Formats the data into a dictionary of BigQuery columns with their values
@@ -222,14 +220,19 @@ class SentimentDict(beam.DoFn): #okay??
     """
 
     def process(self, team_score, window=beam.DoFn.WindowParam):
-        tweet, user_id, sentiment, timestamp = team_score
-        start = timestamp2str(int(window.start))
+        print('THIS IS THE COMPLETE THING', team_score)
+        sentiment = team_score
+        tweet = 'TEST TWEET'
+        user_id = 9
+        timestamp = '3 oktober'
+        print('THIS IS THE TWEET', tweet, 'THIS IS THE ID', user_id, 'THIS IS THE TIMESTAMP', timestamp)
+        # start = timestamp2str(int(window.start))
         yield {
-            'id': start,
+            # 'id': start,
+            'id': user_id,
             'text': tweet,
-            'user_id': user_id,
-            'sentiment': sentiment,
-            'posted_at': timestamp
+            'sentiment': sentiment
+            # 'posted_at': timestamp
         }
 
 
@@ -296,8 +299,8 @@ class CalculateSentimentScores(beam.PTransform): #okay??
             accumulation_mode=trigger.AccumulationMode.ACCUMULATING,
             allowed_lateness=self.allowed_lateness_seconds)
                 # Extract and sum teamname/score pairs from the event data.
-                | 'Preprocess' >> beam.ParDo(Preprocess(field='text'))
-                | 'Predict' >> beam.ParDo(MyPredictDoFn(project_id= self.actual_project, bucket_name=self.actual_bucket)))
+                # | 'Preprocess' >> beam.ParDo(Preprocess('text'))
+                | 'Predict' >> beam.ParDo(MyPredictDoFn(self.actual_project, self.actual_bucket, 'user_id', 'text')))
 
 
 # [END window_and_trigger]
@@ -394,13 +397,10 @@ def run(argv=None, save_main_session=True):
             known_args.dataset,
             {
                 'id': 'STRING',
-                'text': 'NUMERIC',
-                'user_id': 'STRING',
-                'sentiment': 'NUMERIC',
-                'posted_at': 'TIMESTAMP',
+                'text': 'STRING',
+                'sentiment': 'STRING',
             },
-            options.view_as(GoogleCloudOptions).project)
-        )
+            options.view_as(GoogleCloudOptions).project))
 
 
 

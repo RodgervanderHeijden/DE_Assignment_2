@@ -8,3 +8,6 @@
     b)  pipeline2510.py: python pipeline2510.py --topic projects/dataengineering-course/topics/usdata --project dataengineering-course --dataset usdata --table_name posts --pid dataengineering-course --mbucket ass_2
         This is the pipeline from 25-10 where you can see tweets attempting to go through the pipeline, which gives errors because they are not processed blabla
         I included this one because I feel like it is a more basic form, and I maybe already messed up the pipeline.py
+    c)  testellen.py: python testellen.py --topic projects/dataengineering-course/topics/usdata --project dataengineering-course --dataset usdata --table_name testellen --pid dataengineering-course --mbucket ass_2
+        Ellen's trial and error that manages to get something into BigQuery.
+        Disclaimer: definitely a mess
