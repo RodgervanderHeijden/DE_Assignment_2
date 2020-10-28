@@ -22,6 +22,7 @@ def publish_messages(project_id, topic_id, data_file):
     with open(data_file, errors='replace') as fp:  # open in readonly mode
         lines = fp.readlines()
         for data in lines:
+            print(data)
             # Data must be a bytestring
             data = data.encode("utf-8")
             # When you publish a message, the client returns a future.
@@ -30,7 +31,7 @@ def publish_messages(project_id, topic_id, data_file):
 
     print(f"Published messages to {topic_path}.")
 
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"]="SECRET"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"]="C:/Users/s161158/Downloads/dataengineering-course-a9365e622cc2.json"
 logging.getLogger().setLevel(logging.INFO)
 #create_topic("dataengineering-course", "usdata")
-publish_messages("dataengineering-course", "usdata", "twitter_data.csv")
+publish_messages("dataengineering-course", "usdata", "twitter_twatter_dummy_splatter.csv")

@@ -13,7 +13,7 @@ import os
 import sys
 from time import time
 
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"]="SECRET"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"]="C:/Users/s161158/Downloads/dataengineering-course-a9365e622cc2.json"
 
 class ParseTweetFn(beam.DoFn):
     # hybrid Ellen/lab
@@ -163,6 +163,7 @@ def run(argv=None, save_main_session=True):
     parser.add_argument(
         '--topic',
         type=str,
+        default='projects/dataengineering-course/topics/usdata',
         help='Pub/Sub topic to read from')
     parser.add_argument(
         '--subscription',
@@ -171,11 +172,12 @@ def run(argv=None, save_main_session=True):
     parser.add_argument(
         '--dataset',
         type=str,
+        default='usdata',
         required=True,
         help='BigQuery Dataset to write tables to. Must already exist.')
     parser.add_argument(
         '--table_name',
-        default='leader_board',
+        default='testellen',
         help='The BigQuery table name. Should not already exist.')
     parser.add_argument(
         '--team_window_duration',
@@ -221,11 +223,10 @@ def run(argv=None, save_main_session=True):
 
         events = (
                 scores
-                # possible error, our timestamp is not encoded
                 | 'Decodestring' >> beam.Map(lambda b: b.decode('utf-8'))
                 | 'ParseTweetFn' >> beam.ParDo(ParseTweetFn())
                 # possible error, we have no timestamp as input
-                | 'AddEventTimestamps' >> beam.Map(lambda elem: beam.window.TimestampedValue(elem, elem['timestamp'])))
+                | 'AddEventTimestamps' >> beam.Map(lambda elem: beam.window.TimestampedValue(elem, 0)))# MAADD HACKZZX elem['timestamp'])))
 
         # Get user scores and write the results to BigQuery
         (events
