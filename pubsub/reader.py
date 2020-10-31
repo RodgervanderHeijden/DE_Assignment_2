@@ -47,5 +47,5 @@ def read_data(project_id, subscription_id):
 
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"]="dataengineering-course-5fc3ec3747be.json"
 logging.getLogger().setLevel(logging.INFO)
-#create_subscription("dataengineering-course", "usdata", "usdata-sub")
-read_data("dataengineering-course", "usdata-sub")
+# create_subscription("dataengineering-course", "usdata-ellen", "usdata-sub-ellen")
+read_data("dataengineering-course", "usdata-sub-ellen")

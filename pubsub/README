@@ -1,13 +1,19 @@
 0) Change the keyfile to your own key file (DO NOT POST THIS ON GITHUB)
 1) Run pub.py in Pycharm (you should see it pushing files)
 2) Run reader.py in Pycharm (you should see that it receives the tweets)
-3) Run your pipeline in the terminal
+3) Run your pipeline in the terminal, the most up to date (and seems to be working) is sentiment_pipeline.py
+python sentiment_pipeline.py --topic projects/dataengineering-course/topics/usdata-ellen --project dataengineering-course --subscription projects/dataengineering-course/subscriptions/usdata-sub-ellen --dataset usdata --table_name testellen
+
+
+
+
+OLD ATTEMPTS
     a)  pipeline.py: python pipeline.py --topic projects/dataengineering-course/topics/usdata --project dataengineering-course --dataset usdata --table_name posts --pid dataengineering-course --mbucket ass_2
         This pipeline is the most up to date, which currently gives the NotImportedError because of the Preprocessing part.
         I know it downloads the model, which it should do (which happens in the Prediction, so after the Preprocessing????)
     b)  pipeline2510.py: python pipeline2510.py --topic projects/dataengineering-course/topics/usdata --project dataengineering-course --dataset usdata --table_name posts --pid dataengineering-course --mbucket ass_2
         This is the pipeline from 25-10 where you can see tweets attempting to go through the pipeline, which gives errors because they are not processed blabla
         I included this one because I feel like it is a more basic form, and I maybe already messed up the pipeline.py
-    c)  testellen.py: python testellen.py --topic projects/dataengineering-course/topics/usdata --project dataengineering-course --dataset usdata --table_name testellen --pid dataengineering-course --mbucket ass_2
+    c)  testellen.py: python testellen.py --topic projects/dataengineering-course/topics/usdata-ellen --project dataengineering-course --subscription projects/dataengineering-course/subscriptions/usdata-sub-ellen --dataset usdata --table_name testellen --pid dataengineering-course --mbucket ass_2
         Ellen's trial and error that manages to get something into BigQuery.
         Disclaimer: definitely a mess

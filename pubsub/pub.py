@@ -32,5 +32,5 @@ def publish_messages(project_id, topic_id, data_file):
 
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"]="dataengineering-course-5fc3ec3747be.json"
 logging.getLogger().setLevel(logging.INFO)
-#create_topic("dataengineering-course", "usdata")
-publish_messages("dataengineering-course", "usdata", "twitter_data.csv")
+# create_topic("dataengineering-course", "usdata-ellen")
+publish_messages("dataengineering-course", "usdata-ellen", "twitter_data.csv")
