@@ -89,8 +89,6 @@ import argparse
 import csv
 import logging
 import sys
-import time
-from datetime import datetime
 
 import apache_beam as beam
 from apache_beam.metrics.metric import Metrics
@@ -104,35 +102,27 @@ import os
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"]="dataengineering-course-5fc3ec3747be.json"
 
 import re
-from tensorflow.keras.preprocessing import text as tftext
-from google.cloud import storage
-from tensorflow.keras.models import load_model
-import numpy as np
 
-def timestamp2str(t, fmt='%Y-%m-%d %H:%M:%S.000'):
-    """Converts a unix timestamp into a formatted string."""
-    return datetime.fromtimestamp(t).strftime(fmt)
-
+import nltk
+nltk.download('vader_lexicon')
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
 
 class ParseRows(beam.DoFn):
-    """Parses the raw game event info into a Python dictionary.
+    """Parses the raw tweet info into a Python dictionary.
 
     Each event line has the following format:
-      username,teamname,score,timestamp_in_ms,readable_time
+      user_id, tweet, timestamp
 
     e.g.:
-      user2_AsparagusPig,AsparagusPig,10,1445230923951,2015-11-02 09:09:28.224
-
-    The human-readable time string is not used here.
+      @oledi45, "@BarackObama is going on the campaign trail, so now it’s time to ask him about the Russian collusion hoax he led, and if he knew @JoeBiden
+ was getting money from Hunter Biden selling access.", 2020-10-22 10:00:04
     """
 
     def __init__(self):
-        # TODO(BEAM-6158): Revert the workaround once we can pickle super() on py3.
-        # super(ParseGameEventFn, self).__init__()
         beam.DoFn.__init__(self)
         self.num_parse_errors = Metrics.counter(self.__class__, 'num_parse_errors')
 
-    def process(self, elem):
+    def process(self, elem): #it is a Beam.DoFn so it has a process function
         try:
             row = list(csv.reader([elem]))[0]
             yield {
@@ -140,103 +130,57 @@ class ParseRows(beam.DoFn):
                 'user_id': row[17],
                 'timestamp': row[1],
             }
-        except:  # pylint: disable=bare-except
-            # Log and count parse errors
+        except:
             self.num_parse_errors.inc()
             logging.error('Parse error on "%s"', elem)
 
+def preprocess(tweet):
+    """This receives the tweet text and cleans it by removing numbers, symbols, punctuation, and lowercases the text
+    The clean tweet is returned"""
+    regex = re.compile('[^A-Za-z ]')
+    clean_tweet = regex.sub('', tweet.strip().lower())
+    return clean_tweet
 
-# class Preprocess(beam.DoFn):
-#     """A transform to extract key/score information and sum the scores.
-#     The constructor argument `field` determines whether 'team' or 'user' info is
-#     extracted.
-#     """
-#
-#     def __init__(self, field):
-#         # TODO(BEAM-6158): Revert the workaround once we can pickle super() on py3.
-#         # super(ExtractAndSumScore, self).__init__()
-#         beam.DoFn.__init__(self)
-#         self.field = field
-#         self._tokenizer = None
-#
-#     def clean(text):
-#         new = text.lower()
-#         return new
-#
-#     def expand(self, pcoll):
-#         return (
-#                 pcoll
-#                 | beam.Map( lambda elem: (elem[self.field]))
-#                 | beam.FlatMap(self.clean()))
-def voorbereiden(total):
-    ident, text, hoi = total
-    new = text.lower()
-    print('DIT IS WAT IK PRINT:', new, 'DIT IS WAT HET WAS', text)
-    return new
 
-class MyPredictDoFn(beam.DoFn):
+def prediction(tweet):
+    """This receives the clean tweet text and predicts its sentiment using the nltk Sentiment Intensity Analyzer (vader lexicon)
+    The analyzer will generate a dictionary with the scores for positive, neutral, negative and compound(?) sentiment
+    The function will return the label with the highest score as a string"""
+    sentiment_analyzer = SentimentIntensityAnalyzer()
+    result = sentiment_analyzer.polarity_scores(tweet)
+    return [key for key in result.keys() if result[key] == max(result.values())][0]
 
-    def __init__(self, project_id, bucket_name, user, text):
-        self._model = None
-        self._project_id = project_id
-        self._bucket_name = bucket_name
-        self.user = user
-        self.tweet = text
-    #
-    # def setup(self):
-    #     logging.info("Prediction initialisation. Load Model")
-    #     client = storage.Client(project=self._project_id)
-    #     bucket = client.get_bucket(self._bucket_name)
-    #     blob = bucket.blob('keras_saved_model.h5')
-    #     blob.download_to_filename('downloaded_model.h5')
-    #     self._model = load_model('downloaded_model.h5')
-    #
-    # def _postprocess(self, predictions):
-    #     labels = ['negative', 'positive']
-    #     return [
-    #         {
-    #             "label": labels[int(np.round(prediction))],
-    #             "score": float(np.round(prediction, 4))
-    #         } for prediction in predictions]
+class MyPredictDoFn(beam.PTransform):
+    """This is the pipeline part that makes sure the sentiment is analyzed and saved by calling the necessary functions"""
+    def __init__(self):
+        beam.PTransform.__init__(self)
 
-    def process(self, element, **kwargs):
-        # predictions = self._model.predict(element)
-        # labels = self._postprocess(predictions)
-        print('JE KOMT WEL IN DE PROCESS VAN PREDICTION')
-        labels = ['yes', 'yes', 'no']
-        return labels
-
-    def expand(self, pcoll):
+    def expand(self, pcoll, **kwargs): #it is a Beam.PTransform so it has an expand function
+        """For each row in the data, return user_id, clean tweet, timestamp, and the sentiment"""
         return (
                 pcoll
-                | 'preprocess' >> beam.Map(lambda elem: (elem[self.user], voorbereiden(elem[self.tweet]), self.process(elem[self.tweet]))))
+                | 'preprocess' >> beam.Map(lambda elem: (elem['user_id'], preprocess(elem['text']), elem['timestamp'], prediction(preprocess(elem['text'])))))
 
-class SentimentDict(beam.DoFn): #okay??
+
+class SentimentDict(beam.DoFn):
     """Formats the data into a dictionary of BigQuery columns with their values
 
-    Receives a (team, score) pair, extracts the window start timestamp, and
-    formats everything together into a dictionary. The dictionary is in the format
+    Receives a (user_id, clean_tweet, timestamp, sentiment) combination
+    and formats everything together into a dictionary. The dictionary is in the format
     {'bigquery_column': value}
     """
 
-    def process(self, team_score, window=beam.DoFn.WindowParam):
-        print('THIS IS THE COMPLETE THING', team_score)
-        sentiment = team_score
-        tweet = 'TEST TWEET'
-        user_id = 9
-        timestamp = '3 oktober'
-        print('THIS IS THE TWEET', tweet, 'THIS IS THE ID', user_id, 'THIS IS THE TIMESTAMP', timestamp)
-        # start = timestamp2str(int(window.start))
+    def process(self, all_info, window=beam.DoFn.WindowParam): #it is a Beam.DoFn so it has a process function
+        print('This is the result', all_info)
+        user_id, tweet, timestamp, sentiment = all_info
         yield {
-            # 'id': start,
             'id': user_id,
             'text': tweet,
             'sentiment': sentiment
-            # 'posted_at': timestamp
         }
 
 
-class WriteToBigQuery(beam.PTransform): #okay??
+class WriteToBigQuery(beam.PTransform):
     """Generate, format, and write BigQuery table row information."""
 
     def __init__(self, table_name, dataset, schema, project):
@@ -247,8 +191,6 @@ class WriteToBigQuery(beam.PTransform): #okay??
           schema: Dictionary in the format {'column_name': 'bigquery_type'}
           project: Name of the Cloud project containing BigQuery table.
         """
-        # TODO(BEAM-6158): Revert the workaround once we can pickle super() on py3.
-        # super(WriteToBigQuery, self).__init__()
         beam.PTransform.__init__(self)
         self.table_name = table_name
         self.dataset = dataset
@@ -259,7 +201,7 @@ class WriteToBigQuery(beam.PTransform): #okay??
         """Build the output table schema."""
         return ', '.join('%s:%s' % (col, self.schema[col]) for col in self.schema)
 
-    def expand(self, pcoll):
+    def expand(self, pcoll): #it is a Beam.PTransform so it has an expand function
         return (
                 pcoll
                 | 'ConvertToRow' >>
@@ -268,26 +210,19 @@ class WriteToBigQuery(beam.PTransform): #okay??
                 | beam.io.WriteToBigQuery(
             self.table_name, self.dataset, self.project, self.get_schema()))
 
+class CalculateSentimentScores(beam.PTransform):
+    """Calculates sentiment for each tweet within the configured window duration.
 
-# [START window_and_trigger]
-class CalculateSentimentScores(beam.PTransform): #okay??
-    """Calculates scores for each team within the configured window duration.
-
-    Extract team/score pairs from the event stream, using hour-long windows by
+    Extract necessary info from the event stream, using hour-long windows by
     default.
     """
 
-    def __init__(self, team_window_duration, allowed_lateness, project, bucket):
-        # TODO(BEAM-6158): Revert the workaround once we can pickle super() on py3.
-        # super(CalculateTeamScores, self).__init__()
+    def __init__(self, team_window_duration, allowed_lateness):
         beam.PTransform.__init__(self)
         self.team_window_duration = team_window_duration * 60
         self.allowed_lateness_seconds = allowed_lateness * 60
-        self.actual_project = project
-        self.actual_bucket = bucket
 
-    def expand(self, pcoll):
-        # NOTE: the behavior does not exactly match the Java example
+    def expand(self, pcoll): #it is a Beam.PTransform so it has an expand function
         return (
                 pcoll
                 # We will get early (speculative) results as well as cumulative
@@ -298,14 +233,7 @@ class CalculateSentimentScores(beam.PTransform): #okay??
                 trigger.AfterCount(10), trigger.AfterCount(20)),
             accumulation_mode=trigger.AccumulationMode.ACCUMULATING,
             allowed_lateness=self.allowed_lateness_seconds)
-                # Extract and sum teamname/score pairs from the event data.
-                # | 'Preprocess' >> beam.ParDo(Preprocess('text'))
-                | 'Predict' >> beam.ParDo(MyPredictDoFn(self.actual_project, self.actual_bucket, 'user_id', 'text')))
-
-
-# [END window_and_trigger]
-
-
+                | 'Predict' >> MyPredictDoFn())
 
 def run(argv=None, save_main_session=True):
     """Main entry point; defines and runs the hourly_team_score pipeline."""
@@ -336,16 +264,6 @@ def run(argv=None, save_main_session=True):
         default=6,
         help='Numeric value of allowed data lateness, in minutes')
 
-    parser.add_argument(
-        '--pid',
-        dest='pid',
-        help='project id')
-
-    parser.add_argument(
-        '--mbucket',
-        dest='mbucket',
-        help='model bucket name')
-
     known_args, pipeline_args = parser.parse_known_args(argv)
 
 
@@ -370,8 +288,7 @@ def run(argv=None, save_main_session=True):
     options.view_as(StandardOptions).streaming = True
 
     with beam.Pipeline(options=options) as p:
-        # Read game events from Pub/Sub using custom timestamps, which are extracted
-        # from the pubsub data elements, and parse the data.
+        # Read tweet information from Pub/Sub and parse the data.
 
         # Read from PubSub into a PCollection.
         if known_args.subscription:
@@ -386,11 +303,11 @@ def run(argv=None, save_main_session=True):
                 | 'ParseRows' >> beam.ParDo(ParseRows()))
 
 
-        # Get team scores and write the results to BigQuery
-        (  # pylint: disable=expression-not-assigned
+        # Get tweet sentiments and write the results to BigQuery
+        (
                 events
                 | 'CalculateSentimentScores' >> CalculateSentimentScores(
-            known_args.team_window_duration, known_args.allowed_lateness, known_args.pid, known_args.mbucket)
+            known_args.team_window_duration, known_args.allowed_lateness)
                 | 'SentimentDict' >> beam.ParDo(SentimentDict())
                 | 'WriteResults' >> WriteToBigQuery(
             known_args.table_name,
