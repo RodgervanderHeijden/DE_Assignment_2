@@ -15,71 +15,6 @@
 # limitations under the License.
 #
 
-"""Third in a series of four pipelines that tell a story in a 'gaming' domain.
-
-Concepts include: processing unbounded data using fixed windows; use of custom
-timestamps and event-time processing; generation of early/speculative results;
-using AccumulationMode.ACCUMULATING to do cumulative processing of late-arriving
-data.
-
-This pipeline processes an unbounded stream of 'game events'. The calculation of
-the team scores uses fixed windowing based on event time (the time of the game
-play event), not processing time (the time that an event is processed by the
-pipeline). The pipeline calculates the sum of scores per team, for each window.
-By default, the team scores are calculated using one-hour windows.
-
-In contrast-- to demo another windowing option-- the user scores are calculated
-using a global window, which periodically (every ten minutes) emits cumulative
-user score sums.
-
-In contrast to the previous pipelines in the series, which used static, finite
-input data, here we're using an unbounded data source, which lets us provide
-speculative results, and allows handling of late data, at much lower latency.
-We can use the early/speculative results to keep a 'leaderboard' updated in
-near-realtime. Our handling of late data lets us generate correct results,
-e.g. for 'team prizes'. We're now outputting window results as they're
-calculated, giving us much lower latency than with the previous batch examples.
-
-Run injector.Injector to generate pubsub data for this pipeline. The Injector
-documentation provides more detail on how to do this. The injector is currently
-implemented in Java only, it can be used from the Java SDK.
-
-The PubSub topic you specify should be the same topic to which the Injector is
-publishing.
-
-To run the Java injector:
-<beam_root>/examples/java$ mvn compile exec:java \
-    -Dexec.mainClass=org.apache.beam.examples.complete.game.injector.Injector \
-    -Dexec.args="$PROJECT_ID $PUBSUB_TOPIC none"
-
-For a description of the usage and options, use -h or --help.
-
-To specify a different runner:
-  --runner YOUR_RUNNER
-
-NOTE: When specifying a different runner, additional runner-specific options
-      may have to be passed in as well
-
-EXAMPLES
---------
-
-# DirectRunner
-python leader_board.py \
-    --project $PROJECT_ID \
-    --topic projects/$PROJECT_ID/topics/$PUBSUB_TOPIC \
-    --dataset $BIGQUERY_DATASET
-
-# DataflowRunner
-python leader_board.py \
-    --project $PROJECT_ID \
-    --region $REGION_ID \
-    --topic projects/$PROJECT_ID/topics/$PUBSUB_TOPIC \
-    --dataset $BIGQUERY_DATASET \
-    --runner DataflowRunner \
-    --temp_location gs://$BUCKET/user_score/temp
-"""
-
-# pytype: skip-file
 
 from __future__ import absolute_import
 from __future__ import division
@@ -135,8 +70,12 @@ class ParseRows(beam.DoFn):
             logging.error('Parse error on "%s"', elem)
 
 def preprocess(tweet):
-    """This receives the tweet text and cleans it by removing numbers, symbols, punctuation, and lowercases the text
+    """This receives the tweet text and cleans it by removing URLs, numbers, symbols, punctuation, and lowercases the text
     The clean tweet is returned"""
+    split_tweet = tweet.split()
+    # remove tags and URLs
+    split_tweet = [word for word in split_tweet if 'http' not in word and 'www' not in word]
+    tweet = ' '.join(split_tweet)
     regex = re.compile('[^A-Za-z ]')
     clean_tweet = regex.sub('', tweet.strip().lower())
     return clean_tweet
@@ -148,7 +87,9 @@ def prediction(tweet):
     The function will return the label with the highest score as a string"""
     sentiment_analyzer = SentimentIntensityAnalyzer()
     result = sentiment_analyzer.polarity_scores(tweet)
-    return [key for key in result.keys() if result[key] == max(result.values())][0]
+    label = [key for key, value in result.items() if result[key] == max(result.values())][0]
+    score = [value for key, value in result.items() if result[key] == max(result.values())][0]
+    return (label, score)
 
 class MyPredictDoFn(beam.PTransform):
     """This is the pipeline part that makes sure the sentiment is analyzed and saved by calling the necessary functions"""
@@ -156,7 +97,7 @@ class MyPredictDoFn(beam.PTransform):
         beam.PTransform.__init__(self)
 
     def expand(self, pcoll, **kwargs): #it is a Beam.PTransform so it has an expand function
-        """For each row in the data, return user_id, clean tweet, timestamp, and the sentiment"""
+        """For each row in the data, return user_id, clean tweet, timestamp, and the sentiment (label, score)"""
         return (
                 pcoll
                 | 'preprocess' >> beam.Map(lambda elem: (elem['user_id'], preprocess(elem['text']), elem['timestamp'], prediction(preprocess(elem['text'])))))
@@ -165,7 +106,8 @@ class MyPredictDoFn(beam.PTransform):
 class SentimentDict(beam.DoFn):
     """Formats the data into a dictionary of BigQuery columns with their values
 
-    Receives a (user_id, clean_tweet, timestamp, sentiment) combination
+    Receives a (user_id, clean_tweet, timestamp, sentiment(label + score)) combination,
+    creates an extra column based on the presidential candidate mentioned,
     and formats everything together into a dictionary. The dictionary is in the format
     {'bigquery_column': value}
     """
@@ -173,10 +115,21 @@ class SentimentDict(beam.DoFn):
     def process(self, all_info, window=beam.DoFn.WindowParam): #it is a Beam.DoFn so it has a process function
         print('This is the result', all_info)
         user_id, tweet, timestamp, sentiment = all_info
+        if 'biden' and 'trump' in tweet:
+            candidate = 'Both'
+        elif 'biden' in tweet:
+            candidate = 'Biden'
+        elif 'trump' in tweet:
+            candidate = 'Trump'
+        else:
+            candidate = None
         yield {
-            'id': user_id,
-            'text': tweet,
-            'sentiment': sentiment
+            'user_id': user_id,
+            'tweet': tweet,
+            'sentiment_label': sentiment[0],
+            'sentiment_score': sentiment[1],
+            'time_stamp': timestamp,
+            'candidate': candidate
         }
 
 
@@ -213,13 +166,12 @@ class WriteToBigQuery(beam.PTransform):
 class CalculateSentimentScores(beam.PTransform):
     """Calculates sentiment for each tweet within the configured window duration.
 
-    Extract necessary info from the event stream, using hour-long windows by
-    default.
+    Extract necessary info from the event stream, using minute-long windows.
     """
 
-    def __init__(self, team_window_duration, allowed_lateness):
+    def __init__(self, window_duration, allowed_lateness):
         beam.PTransform.__init__(self)
-        self.team_window_duration = team_window_duration * 60
+        self.window_duration = window_duration * 60
         self.allowed_lateness_seconds = allowed_lateness * 60
 
     def expand(self, pcoll): #it is a Beam.PTransform so it has an expand function
@@ -228,7 +180,7 @@ class CalculateSentimentScores(beam.PTransform):
                 # We will get early (speculative) results as well as cumulative
                 # processing of late data.
                 | 'TweetFixedWindows' >> beam.WindowInto(
-            beam.window.FixedWindows(self.team_window_duration),
+            beam.window.FixedWindows(self.window_duration),
             trigger=trigger.AfterWatermark(
                 trigger.AfterCount(10), trigger.AfterCount(20)),
             accumulation_mode=trigger.AccumulationMode.ACCUMULATING,
@@ -236,7 +188,7 @@ class CalculateSentimentScores(beam.PTransform):
                 | 'Predict' >> MyPredictDoFn())
 
 def run(argv=None, save_main_session=True):
-    """Main entry point; defines and runs the hourly_team_score pipeline."""
+    """Main entry point; defines and runs the sentiment pipeline."""
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--topic', type=str, help='Pub/Sub topic to read from')
@@ -253,15 +205,15 @@ def run(argv=None, save_main_session=True):
         default='leader_board',
         help='The BigQuery table name. Should not already exist.')
     parser.add_argument(
-        '--team_window_duration',
+        '--window_duration',
         type=int,
-        default=3,
-        help='Numeric value of fixed window duration for team '
+        default=1,
+        help='Numeric value of fixed window duration for sentiment '
              'analysis, in minutes')
     parser.add_argument(
         '--allowed_lateness',
         type=int,
-        default=6,
+        default=2,
         help='Numeric value of allowed data lateness, in minutes')
 
     known_args, pipeline_args = parser.parse_known_args(argv)
@@ -307,15 +259,18 @@ def run(argv=None, save_main_session=True):
         (
                 events
                 | 'CalculateSentimentScores' >> CalculateSentimentScores(
-            known_args.team_window_duration, known_args.allowed_lateness)
+            known_args.window_duration, known_args.allowed_lateness)
                 | 'SentimentDict' >> beam.ParDo(SentimentDict())
                 | 'WriteResults' >> WriteToBigQuery(
             known_args.table_name,
             known_args.dataset,
             {
-                'id': 'STRING',
-                'text': 'STRING',
-                'sentiment': 'STRING',
+                'user_id': 'STRING',
+                'tweet': 'STRING',
+                'sentiment_label': 'STRING',
+                'sentiment_score': 'NUMERIC',
+                'time_stamp': 'STRING',
+                'candidate': 'STRING',
             },
             options.view_as(GoogleCloudOptions).project))
 
