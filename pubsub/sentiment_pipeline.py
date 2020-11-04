@@ -87,8 +87,14 @@ def prediction(tweet):
     The analyzer will generate a dictionary with the scores for positive, neutral, negative and compound(?) sentiment
     The function will return the label with the highest score as a string"""
     result = sentiment_analyzer.polarity_scores(tweet)
-    label = [key for key, value in result.items() if result[key] == max(result.values())][0]
-    score = [value for key, value in result.items() if result[key] == max(result.values())][0]
+    score = [value for key, value in result.items() if key == 'compound'][0]
+    if score >= 0.05:
+        label = 'pos'
+    elif score <= -0.05:
+        label = 'neg'
+    else:
+        label = 'neu'
+
     return (label, score)
 
 class MyPredictDoFn(beam.PTransform):
@@ -127,7 +133,7 @@ class SentimentDict(beam.DoFn):
             'user_id': user_id,
             'tweet': tweet,
             'sentiment_label': sentiment[0],
-            'sentiment_score': sentiment[1],
+            'compound_score': sentiment[1],
             'time_stamp': timestamp,
             'candidate': candidate
         }
@@ -268,7 +274,7 @@ def run(argv=None, save_main_session=True):
                 'user_id': 'STRING',
                 'tweet': 'STRING',
                 'sentiment_label': 'STRING',
-                'sentiment_score': 'NUMERIC',
+                'compound_score': 'NUMERIC',
                 'time_stamp': 'STRING',
                 'candidate': 'STRING',
             },
