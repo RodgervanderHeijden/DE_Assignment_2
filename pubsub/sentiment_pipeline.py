@@ -84,8 +84,8 @@ def preprocess(tweet):
 
 def prediction(tweet):
     """This receives the clean tweet text and predicts its sentiment using the nltk Sentiment Intensity Analyzer (vader lexicon)
-    The analyzer will generate a dictionary with the scores for positive, neutral, negative and compound(?) sentiment
-    The function will return the label with the highest score as a string"""
+    The analyzer will generate a dictionary with the scores for positive, neutral, negative and compound sentiment.
+    From this we return the compound score, and a label based on this score."""
     result = sentiment_analyzer.polarity_scores(tweet)
     score = [value for key, value in result.items() if key == 'compound'][0]
     if score >= 0.05:
