@@ -41,6 +41,7 @@ import re
 import nltk
 nltk.download('vader_lexicon')
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
+sentiment_analyzer = SentimentIntensityAnalyzer()
 
 class ParseRows(beam.DoFn):
     """Parses the raw tweet info into a Python dictionary.
@@ -85,7 +86,6 @@ def prediction(tweet):
     """This receives the clean tweet text and predicts its sentiment using the nltk Sentiment Intensity Analyzer (vader lexicon)
     The analyzer will generate a dictionary with the scores for positive, neutral, negative and compound(?) sentiment
     The function will return the label with the highest score as a string"""
-    sentiment_analyzer = SentimentIntensityAnalyzer()
     result = sentiment_analyzer.polarity_scores(tweet)
     label = [key for key, value in result.items() if result[key] == max(result.values())][0]
     score = [value for key, value in result.items() if result[key] == max(result.values())][0]
