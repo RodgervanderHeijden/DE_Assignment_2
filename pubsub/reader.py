@@ -45,7 +45,8 @@ def read_data(project_id, subscription_id):
         except TimeoutError:
             streaming_pull_future.cancel()
 
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"]="C:/Users/s161158/Downloads/dataengineering-course-a9365e622cc2.json"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"]="dataengineering-course-5fc3ec3747be.json"
+
 logging.getLogger().setLevel(logging.INFO)
-#create_subscription("dataengineering-course", "usdata", "usdata-sub")
-read_data("dataengineering-course", "usdata-sub")
+# create_subscription("dataengineering-course", "election_data", "election_data_sub")
+read_data("dataengineering-course", "election_data_sub")
