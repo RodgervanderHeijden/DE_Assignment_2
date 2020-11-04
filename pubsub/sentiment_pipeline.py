@@ -45,10 +45,8 @@ sentiment_analyzer = SentimentIntensityAnalyzer()
 
 class ParseRows(beam.DoFn):
     """Parses the raw tweet info into a Python dictionary.
-
     Each event line has the following format:
       user_id, tweet, timestamp
-
     e.g.:
       @oledi45, "@BarackObama is going on the campaign trail, so now it’s time to ask him about the Russian collusion hoax he led, and if he knew @JoeBiden
  was getting money from Hunter Biden selling access.", 2020-10-22 10:00:04
@@ -84,8 +82,8 @@ def preprocess(tweet):
 
 def prediction(tweet):
     """This receives the clean tweet text and predicts its sentiment using the nltk Sentiment Intensity Analyzer (vader lexicon)
-    The analyzer will generate a dictionary with the scores for positive, neutral, negative and compound sentiment.
-    From this we return the compound score, and a label based on this score."""
+    The analyzer will generate a dictionary with the scores for positive, neutral, negative and compound sentiment
+    We return the compound score and a label based on this"""
     result = sentiment_analyzer.polarity_scores(tweet)
     score = [value for key, value in result.items() if key == 'compound'][0]
     if score >= 0.05:
@@ -111,7 +109,6 @@ class MyPredictDoFn(beam.PTransform):
 
 class SentimentDict(beam.DoFn):
     """Formats the data into a dictionary of BigQuery columns with their values
-
     Receives a (user_id, clean_tweet, timestamp, sentiment(label + score)) combination,
     creates an extra column based on the presidential candidate mentioned,
     and formats everything together into a dictionary. The dictionary is in the format
@@ -171,7 +168,6 @@ class WriteToBigQuery(beam.PTransform):
 
 class CalculateSentimentScores(beam.PTransform):
     """Calculates sentiment for each tweet within the configured window duration.
-
     Extract necessary info from the event stream, using minute-long windows.
     """
 

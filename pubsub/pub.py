@@ -22,7 +22,6 @@ def publish_messages(project_id, topic_id, data_file):
     with open(data_file, errors='replace') as fp:  # open in readonly mode
         lines = fp.readlines()
         for data in lines:
-            print(data)
             # Data must be a bytestring
             data = data.encode("utf-8")
             # When you publish a message, the client returns a future.
@@ -30,7 +29,6 @@ def publish_messages(project_id, topic_id, data_file):
             print(future.result())
 
     print(f"Published messages to {topic_path}.")
-
 
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"]="dataengineering-course-5fc3ec3747be.json"
 logging.getLogger().setLevel(logging.INFO)
