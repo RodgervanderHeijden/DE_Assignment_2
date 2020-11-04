@@ -121,7 +121,7 @@ class SentimentDict(beam.DoFn):
     def process(self, all_info, window=beam.DoFn.WindowParam): #it is a Beam.DoFn so it has a process function
         print('This is the result', all_info)
         user_id, tweet, timestamp, sentiment = all_info
-        if 'biden' and 'trump' in tweet:
+        if 'biden' in tweet and 'trump' in tweet:
             candidate = 'Both'
         elif 'biden' in tweet:
             candidate = 'Biden'
